@@ -1,3 +1,5 @@
+import argparse
+
 import tensorflow as tf
 
 # 15 classes, representing the main locations on DM6 map:
@@ -20,7 +22,9 @@ NUM_CLASSES = 15
 
 IMAGE_WIDTH = 128
 IMAGE_HEIGHT = 72
-IMAGE_PIXELS = IMAGE_WIDTH * IMAGE_HEIGHT
+NUM_CHANNELS = 3
+IMAGE_PIXELS = IMAGE_WIDTH * IMAGE_HEIGHT * NUM_CHANNELS
+FLAGS = None
 
 
 def weight_variable(shape):
@@ -79,3 +83,57 @@ def loss(labels, predictions):
 
 def train_op(loss, learning_rate=1e-4):
     tf.train.AdamOptimizer(learning_rate).minimize(loss)
+
+
+def read_and_decode(filename_queue):
+    reader = tf.TFRecordReader()
+    _, serialized_example = reader.read(filename_queue)
+    features = tf.parse_single_example(serialized_example, features={
+        'image_raw': tf.FixedLenFeature([], tf.string),
+        'label': tf.FixedLenFeature([], tf.int64)
+    })
+    image = tf.decode_raw(features['image_raw'], tf.uint8)
+    image.set_shape([IMAGE_PIXELS])
+    label = tf.one_hot(features['label'], NUM_CLASSES, 1.0, 0.0)
+    return image, label
+
+
+def inputs(filename, batch_size, num_epochs):
+    with tf.name_scope('input'):
+        filname_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
+        image, label = read_and_decode(filname_queue)
+        images, sparse_labels = tf.train.shuffle_batch([image, label], batch_size=batch_size, num_threads=1,
+                                                       capacity=1000 + 3 * batch_size, min_after_dequeue=1000)
+        return images, sparse_labels
+
+
+def run_training():
+    with tf.Graph().as_default():
+        images, labels = inputs(FLAGS.filename, FLAGS.batch_size, FLAGS.num_epochs)
+        sess = tf.Session()
+        init_op = tf.group(tf.global_variables_initializer(),
+                           tf.local_variables_initializer())
+        sess.run(init_op)
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+        try:
+            step = 0
+            while not coord.should_stop():
+                i, l = sess.run([images, labels])
+                step += 1
+        except tf.errors.OutOfRangeError:
+            print('Done training for %d epochs, %d steps.' % (FLAGS.num_epochs, step))
+        finally:
+            coord.request_stop()
+
+        coord.join(threads)
+        sess.close()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--filename', type=str, required=True, help='Input TFRecords file')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
+    FLAGS, unparsed = parser.parse_known_args()
+    run_training()
