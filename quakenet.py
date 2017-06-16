@@ -46,7 +46,7 @@ def max_pool_2x2(x):
                           strides=[1, 2, 2, 1], padding='SAME')
 
 
-def model(x):
+def inference(x, keep_prob):
     W_conv1 = weight_variable([5, 5, 3, 32])
     b_conv1 = bias_variable([32])
 
@@ -67,22 +67,21 @@ def model(x):
     h_pool2_flat = tf.reshape(h_pool2, [-1, 18 * 32 * 64])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
-    keep_prob = tf.placeholder(tf.float32)
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
     W_fc2 = weight_variable([1024, NUM_CLASSES])
     b_fc2 = bias_variable([NUM_CLASSES])
 
     y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-    return y_conv, keep_prob
+    return y_conv
 
 
-def loss(labels, predictions):
+def x_entropy_op(labels, predictions):
     return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=predictions))
 
 
 def train_op(loss, learning_rate=1e-4):
-    tf.train.AdamOptimizer(learning_rate).minimize(loss)
+    return tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
 
 def read_and_decode(filename_queue):
@@ -92,7 +91,7 @@ def read_and_decode(filename_queue):
         'image_raw': tf.FixedLenFeature([], tf.string),
         'label': tf.FixedLenFeature([], tf.int64)
     })
-    image = tf.decode_raw(features['image_raw'], tf.uint8)
+    image = tf.decode_raw(features['image_raw'], tf.float32)
     image.set_shape([IMAGE_PIXELS])
     label = tf.one_hot(features['label'], NUM_CLASSES, 1.0, 0.0)
     return image, label
@@ -107,19 +106,39 @@ def inputs(filename, batch_size, num_epochs):
         return images, sparse_labels
 
 
+def accuracy_op(y_conv, labels):
+    correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(labels, 1))
+    return tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+
 def run_training():
     with tf.Graph().as_default():
-        images, labels = inputs(FLAGS.filename, FLAGS.batch_size, FLAGS.num_epochs)
+        images, labels = inputs(FLAGS.train_filename, FLAGS.batch_size, FLAGS.num_epochs)
+        #images_test, labels_test = inputs(FLAGS.test_filename, FLAGS.batch_size, FLAGS.num_epochs)
         sess = tf.Session()
         init_op = tf.group(tf.global_variables_initializer(),
                            tf.local_variables_initializer())
         sess.run(init_op)
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+        keep_prob = tf.placeholder(tf.float32)
+        y_conv = inference(images, keep_prob)
+        x_entropy = x_entropy_op(labels, y_conv)
+        accuracy = accuracy_op(y_conv, labels)
+        train = train_op(x_entropy)
+
+        tf.summary.scalar('accuracy', accuracy)
+        tf.summary.scalar('cross_entropy', x_entropy)
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter('E:/tensorboard_log/v1/train/', sess.graph)
         try:
             step = 0
             while not coord.should_stop():
-                i, l = sess.run([images, labels])
+                summary, _ = sess.run([merged, train], feed_dict={keep_prob: 0.5})
+                if step % 100 == 0:
+                    summary, _ = sess.run([merged, accuracy], feed_dict={keep_prob: 1.0})
+                train_writer.add_summary(summary, step)
                 step += 1
         except tf.errors.OutOfRangeError:
             print('Done training for %d epochs, %d steps.' % (FLAGS.num_epochs, step))
@@ -132,7 +151,8 @@ def run_training():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--filename', type=str, required=True, help='Input TFRecords file')
+    parser.add_argument('--train_filename', type=str, required=True, help='Training TFRecords file')
+    #parser.add_argument('--test_filename', type=str, required=True, help='Test TFRecords file')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
     FLAGS, unparsed = parser.parse_known_args()
