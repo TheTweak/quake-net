@@ -91,7 +91,7 @@ def read_and_decode(filename_queue):
         'image_raw': tf.FixedLenFeature([], tf.string),
         'label': tf.FixedLenFeature([], tf.int64)
     })
-    image = tf.decode_raw(features['image_raw'], tf.float32)
+    image = tf.cast(tf.decode_raw(features['image_raw'], tf.uint8), tf.float32)
     image.set_shape([IMAGE_PIXELS])
     label = tf.one_hot(features['label'], NUM_CLASSES, 1.0, 0.0)
     return image, label
@@ -102,7 +102,8 @@ def inputs(filename, batch_size, num_epochs):
         filname_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
         image, label = read_and_decode(filname_queue)
         images, sparse_labels = tf.train.shuffle_batch([image, label], batch_size=batch_size, num_threads=1,
-                                                       capacity=1000 + 3 * batch_size, min_after_dequeue=1000)
+                                                       capacity=1000 + 3 * batch_size, min_after_dequeue=1000,
+                                                       allow_smaller_final_batch=True)
         return images, sparse_labels
 
 
@@ -116,17 +117,20 @@ def run_training():
         images, labels = inputs(FLAGS.train_filename, FLAGS.batch_size, FLAGS.num_epochs)
         #images_test, labels_test = inputs(FLAGS.test_filename, FLAGS.batch_size, FLAGS.num_epochs)
         sess = tf.Session()
-        init_op = tf.group(tf.global_variables_initializer(),
-                           tf.local_variables_initializer())
-        sess.run(init_op)
+
         coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
         keep_prob = tf.placeholder(tf.float32)
         y_conv = inference(images, keep_prob)
         x_entropy = x_entropy_op(labels, y_conv)
         accuracy = accuracy_op(y_conv, labels)
         train = train_op(x_entropy)
+
+        init_op = tf.group(tf.global_variables_initializer(),
+                           tf.local_variables_initializer())
+        sess.run(init_op)
+
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
         tf.summary.scalar('accuracy', accuracy)
         tf.summary.scalar('cross_entropy', x_entropy)
