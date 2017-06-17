@@ -112,10 +112,9 @@ def accuracy_op(y_conv, labels):
     return tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
-def run_training():
+def run():
     with tf.Graph().as_default():
-        images, labels = inputs(FLAGS.train_filename, FLAGS.batch_size, FLAGS.num_epochs)
-        #images_test, labels_test = inputs(FLAGS.test_filename, FLAGS.batch_size, FLAGS.num_epochs)
+        images, labels = inputs(FLAGS.input_filename, FLAGS.batch_size, FLAGS.num_epochs)
         sess = tf.Session()
 
         coord = tf.train.Coordinator()
@@ -132,15 +131,20 @@ def run_training():
 
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
+        is_training = FLAGS.mode == 'train'
+        train_writer = tf.summary.FileWriter('E:/tensorboard_log/v1/{}/'.format(FLAGS.mode), sess.graph)
+        saver = tf.train.Saver()
         tf.summary.scalar('accuracy', accuracy)
         tf.summary.scalar('cross_entropy', x_entropy)
         merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter('E:/tensorboard_log/v1/train/', sess.graph)
+        if not is_training:
+            saver.restore(sess, FLAGS.model_dir)
         try:
             step = 0
             while not coord.should_stop():
-                summary, _ = sess.run([merged, train], feed_dict={keep_prob: 0.5})
-                if step % 100 == 0:
+                if is_training:
+                    summary, _ = sess.run([merged, train], feed_dict={keep_prob: 0.5})
+                if not is_training or step % 100 == 0:
                     summary, _ = sess.run([merged, accuracy], feed_dict={keep_prob: 1.0})
                 train_writer.add_summary(summary, step)
                 step += 1
@@ -150,14 +154,17 @@ def run_training():
             coord.request_stop()
 
         coord.join(threads)
+        if is_training:
+            saver.save(sess, FLAGS.model_dir)
         sess.close()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train_filename', type=str, required=True, help='Training TFRecords file')
-    #parser.add_argument('--test_filename', type=str, required=True, help='Test TFRecords file')
+    parser.add_argument('--input_filename', type=str, required=False, help='Input TFRecords file')
+    parser.add_argument('--model_dir', type=str, required=True, help='Directory where to save the trained model')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
+    parser.add_argument('--mode', type=str, default='train', help='Mode to run: train or test')
     FLAGS, unparsed = parser.parse_known_args()
-    run_training()
+    run()
