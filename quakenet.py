@@ -159,12 +159,27 @@ def run():
         sess.close()
 
 
+def process_video():
+    pass
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--labeled_data', action='append', required=True, help='Input TFRecords files')
-    parser.add_argument('--model_dir', type=str, required=True, help='Directory where to save the trained model')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
-    parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
-    parser.add_argument('--mode', type=str, default='train', help='Mode to run: train or test')
+    subparsers = parser.add_subparsers()
+
+    parser_run = subparsers.add_parser('train', help='run training / testing')
+    parser_run.set_defaults(func=run)
+    parser_run.add_argument('--labeled_data', action='append', required=True, help='Input TFRecords files')
+    parser_run.add_argument('--model_dir', type=str, required=True, help='Directory where to save the trained model')
+    parser_run.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser_run.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
+    parser_run.add_argument('--mode', type=str, default='train', help='Mode to run: train or test')
+
+    parser_run = subparsers.add_parser('video', help='Run inference on the specified video. Performs prediction using '
+                                                     'batches of frames')
+    parser_run.set_defaults(func=process_video)
+    parser_run.add_argument('--video', type='str', required=True, help='Input video location')
+
     FLAGS, unparsed = parser.parse_known_args()
-    run()
+    if FLAGS.func:
+        FLAGS.func()
