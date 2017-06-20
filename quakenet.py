@@ -97,9 +97,9 @@ def read_and_decode(filename_queue):
     return image, label
 
 
-def inputs(filename, batch_size, num_epochs):
+def inputs(files, batch_size, num_epochs):
     with tf.name_scope('input'):
-        filname_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
+        filname_queue = tf.train.string_input_producer([filename for filename in files], num_epochs=num_epochs)
         image, label = read_and_decode(filname_queue)
         images, sparse_labels = tf.train.shuffle_batch([image, label], batch_size=batch_size, num_threads=1,
                                                        capacity=1000 + 3 * batch_size, min_after_dequeue=1000,
@@ -114,7 +114,7 @@ def accuracy_op(y_conv, labels):
 
 def run():
     with tf.Graph().as_default():
-        images, labels = inputs(FLAGS.input_filename, FLAGS.batch_size, FLAGS.num_epochs)
+        images, labels = inputs(FLAGS.labeled_data, FLAGS.batch_size, FLAGS.num_epochs)
         sess = tf.Session()
 
         coord = tf.train.Coordinator()
@@ -132,7 +132,7 @@ def run():
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
         is_training = FLAGS.mode == 'train'
-        train_writer = tf.summary.FileWriter('E:/tensorboard_log/v1/{}/'.format(FLAGS.mode), sess.graph)
+        train_writer = tf.summary.FileWriter('E:/tensorboard_log/v1_1/{}/'.format(FLAGS.mode), sess.graph)
         saver = tf.train.Saver()
         tf.summary.scalar('accuracy', accuracy)
         tf.summary.scalar('cross_entropy', x_entropy)
@@ -161,7 +161,7 @@ def run():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_filename', type=str, required=False, help='Input TFRecords file')
+    parser.add_argument('--labeled_data', action='append', required=True, help='Input TFRecords files')
     parser.add_argument('--model_dir', type=str, required=True, help='Directory where to save the trained model')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
