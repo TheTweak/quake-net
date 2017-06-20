@@ -102,3 +102,6 @@ ENV/
 
 # Intellij IDEA
 .idea/
+
+# tensorflow checkpoints
+/checkpoint
