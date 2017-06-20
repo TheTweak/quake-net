@@ -1,6 +1,9 @@
 import argparse
 
 import tensorflow as tf
+import cv2
+import numpy as np
+import time
 
 # 15 classes, representing the main locations on DM6 map:
 # 0) arena
@@ -160,8 +163,50 @@ def run():
 
 
 def process_video():
-    pass
+    sess = tf.Session()
+    keep_prob = tf.placeholder(tf.float32)
+    x = tf.placeholder(tf.float32, shape=[None, IMAGE_PIXELS])
+    y_conv = inference(x, keep_prob)
 
+    init_op = tf.group(tf.global_variables_initializer(),
+                       tf.local_variables_initializer())
+    sess.run(init_op)
+    saver = tf.train.Saver()
+    saver.restore(sess, FLAGS.model_dir)
+
+    cap = cv2.VideoCapture(FLAGS.file)
+    frame_buffer = []
+
+    while True:
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        resized_frame = cv2.resize(frame, (IMAGE_WIDTH, IMAGE_HEIGHT))
+        frame_buffer.append(resized_frame.flatten())
+
+        if len(frame_buffer) == FLAGS.batch_size:
+            input_batch = np.array(frame_buffer)
+            frame_buffer = []
+            predictions = sess.run(y_conv, feed_dict={keep_prob: 1.0, x: input_batch})
+            arg_max = sess.run(tf.arg_max(predictions, 1))
+            unique, counts = np.unique(arg_max, return_counts=True)
+            print(np.asarray((unique, counts)).T)
+            print()
+            while True:
+                time.sleep(1)
+                if cv2.waitKey(1) & 0xFF == ord('w'):
+                    break
+
+        cv2.imshow('frame', frame)
+        cv2.imshow('resized_frame', resized_frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -175,10 +220,12 @@ if __name__ == '__main__':
     parser_run.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
     parser_run.add_argument('--mode', type=str, default='train', help='Mode to run: train or test')
 
-    parser_run = subparsers.add_parser('video', help='Run inference on the specified video. Performs prediction using '
-                                                     'batches of frames')
-    parser_run.set_defaults(func=process_video)
-    parser_run.add_argument('--video', type='str', required=True, help='Input video location')
+    parser_video = subparsers.add_parser('video', help='Run inference on the specified video. Performs prediction '
+                                                       'using batches of frames')
+    parser_video.set_defaults(func=process_video)
+    parser_video.add_argument('--file', type=str, required=True, help='Input video location')
+    parser_video.add_argument('--batch_size', type=int, default=30, help='Batch size')
+    parser_video.add_argument('--model_dir', type=str, required=True, help='Directory with the saved model checkpoint')
 
     FLAGS, unparsed = parser.parse_known_args()
     if FLAGS.func:
