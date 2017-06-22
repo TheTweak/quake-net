@@ -135,7 +135,7 @@ def run():
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
         is_training = FLAGS.mode == 'train'
-        train_writer = tf.summary.FileWriter('E:/tensorboard_log/v1_1/{}/'.format(FLAGS.mode), sess.graph)
+        train_writer = tf.summary.FileWriter('E:/tensorboard_log/{}/{}/'.format(FLAGS.log_name, FLAGS.mode), sess.graph)
         saver = tf.train.Saver()
         tf.summary.scalar('accuracy', accuracy)
         tf.summary.scalar('cross_entropy', x_entropy)
@@ -219,6 +219,7 @@ if __name__ == '__main__':
     parser_run.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser_run.add_argument('--num_epochs', type=int, default=1, help='Number of epochs')
     parser_run.add_argument('--mode', type=str, default='train', help='Mode to run: train or test')
+    parser_run.add_argument('--log_name', type=str, default='v1', help='Log name for Tensorboard')
 
     parser_video = subparsers.add_parser('video', help='Run inference on the specified video. Performs prediction '
                                                        'using batches of frames')
