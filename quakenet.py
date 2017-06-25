@@ -140,7 +140,7 @@ def run():
         tf.summary.scalar('accuracy', accuracy)
         tf.summary.scalar('cross_entropy', x_entropy)
         merged = tf.summary.merge_all()
-        if not is_training:
+        if FLAGS.model_dir:
             saver.restore(sess, FLAGS.model_dir)
         try:
             step = 0
@@ -149,6 +149,9 @@ def run():
                     summary, _ = sess.run([merged, train], feed_dict={keep_prob: 0.5})
                 if not is_training or step % 100 == 0:
                     summary, _ = sess.run([merged, accuracy], feed_dict={keep_prob: 1.0})
+                if is_training and step % 1000 == 0:
+                    print('checkpoint')
+                    saver.save(sess, FLAGS.model_dir)
                 train_writer.add_summary(summary, step)
                 step += 1
         except tf.errors.OutOfRangeError:
