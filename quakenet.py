@@ -149,7 +149,7 @@ def run():
                     summary, _ = sess.run([merged, train], feed_dict={keep_prob: 0.5})
                 if not is_training or step % 100 == 0:
                     summary, _ = sess.run([merged, accuracy], feed_dict={keep_prob: 1.0})
-                if is_training and step % 1000 == 0:
+                if is_training and step % 100 == 0:
                     print('checkpoint')
                     saver.save(sess, FLAGS.model_dir)
                 train_writer.add_summary(summary, step)
