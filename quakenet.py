@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import tensorflow as tf
 import cv2
@@ -23,8 +24,8 @@ import time
 # 14) rail
 NUM_CLASSES = 15
 
-IMAGE_WIDTH = 128
-IMAGE_HEIGHT = 72
+IMAGE_WIDTH = 256
+IMAGE_HEIGHT = 144
 NUM_CHANNELS = 3
 IMAGE_PIXELS = IMAGE_WIDTH * IMAGE_HEIGHT * NUM_CHANNELS
 FLAGS = None
@@ -53,7 +54,7 @@ def inference(x, keep_prob):
     W_conv1 = weight_variable([5, 5, 3, 32])
     b_conv1 = bias_variable([32])
 
-    x_image = tf.reshape(x, [-1, 72, 128, 3])
+    x_image = tf.reshape(x, [-1, IMAGE_HEIGHT, IMAGE_WIDTH, 3])
 
     h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
     h_pool1 = max_pool_2x2(h_conv1)
@@ -64,10 +65,10 @@ def inference(x, keep_prob):
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
     h_pool2 = max_pool_2x2(h_conv2)
 
-    W_fc1 = weight_variable([18 * 32 * 64, 1024])
+    W_fc1 = weight_variable([int(IMAGE_HEIGHT / 4) * int(IMAGE_WIDTH / 4) * 64, 1024])
     b_fc1 = bias_variable([1024])
 
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 18 * 32 * 64])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, int(IMAGE_HEIGHT / 4) * int(IMAGE_WIDTH / 4) * 64])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
@@ -140,7 +141,7 @@ def run():
         tf.summary.scalar('accuracy', accuracy)
         tf.summary.scalar('cross_entropy', x_entropy)
         merged = tf.summary.merge_all()
-        if FLAGS.model_dir:
+        if os.path.exists(FLAGS.model_dir + '/checkpoint'):
             saver.restore(sess, FLAGS.model_dir)
         try:
             step = 0
@@ -187,23 +188,19 @@ def process_video():
             break
 
         resized_frame = cv2.resize(frame, (IMAGE_WIDTH, IMAGE_HEIGHT))
-        frame_buffer.append(resized_frame.flatten())
-
-        if len(frame_buffer) == FLAGS.batch_size:
-            input_batch = np.array(frame_buffer)
-            frame_buffer = []
-            predictions = sess.run(y_conv, feed_dict={keep_prob: 1.0, x: input_batch})
-            arg_max = sess.run(tf.arg_max(predictions, 1))
-            unique, counts = np.unique(arg_max, return_counts=True)
-            print(np.asarray((unique, counts)).T)
-            print()
-            while True:
-                time.sleep(1)
-                if cv2.waitKey(1) & 0xFF == ord('w'):
-                    break
 
         cv2.imshow('frame', frame)
-        cv2.imshow('resized_frame', resized_frame)
+
+        while True:
+            if cv2.waitKey(1) & 0xFF == ord('w'):
+                break
+            elif cv2.waitKey(1) & 0xFF == ord('e'):
+                input_batch = np.array([resized_frame.flatten()])
+                predictions = sess.run(y_conv, feed_dict={keep_prob: 1.0, x: input_batch})
+                arg_max = sess.run(tf.arg_max(predictions, 1))
+                unique, counts = np.unique(arg_max, return_counts=True)
+                print(np.asarray((unique, counts)).T)
+                print()
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
